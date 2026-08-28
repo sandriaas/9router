@@ -37,6 +37,11 @@ export async function resolveModelAlias(alias) {
  */
 export async function getModelInfo(modelStr) {
   const parsed = parseModel(modelStr);
+  const comboName = modelStr.includes("/") ? parsed.model : modelStr;
+  const combo = await getComboByName(comboName);
+  if (combo) {
+    return { provider: null, model: comboName };
+  }
 
   if (!parsed.isAlias) {
     // Provider-node prefixes are user-defined. They must not override built-in
@@ -66,15 +71,6 @@ export async function getModelInfo(modelStr) {
     };
   }
 
-  // Check if this is a combo name before resolving as alias
-  // This prevents combo names from being incorrectly routed to providers
-  const combo = await getComboByName(parsed.model);
-  if (combo) {
-    // Return null provider to signal this should be handled as combo
-    // The caller (handleChat) will detect this and handle it as combo
-    return { provider: null, model: parsed.model };
-  }
-
   return getModelInfoCore(modelStr, getModelAliases);
 }
 
@@ -83,10 +79,9 @@ export async function getModelInfo(modelStr) {
  * @returns {Promise<string[]|null>} Array of models or null if not a combo
  */
 export async function getComboModels(modelStr) {
-  // Only check if it's not in provider/model format
-  if (modelStr.includes("/")) return null;
-
-  const combo = await getComboByName(modelStr);
+  const parsed = parseModel(modelStr);
+  const comboName = modelStr.includes("/") ? parsed.model : modelStr;
+  const combo = await getComboByName(comboName);
   if (combo && combo.models && combo.models.length > 0) {
     return combo.models;
   }

@@ -29,4 +29,14 @@ describe("combo model routing", () => {
       "cx/gpt-5.4-mini",
     ]);
   });
+
+  it("recognizes a provider-qualified combo name", async () => {
+    await expect(getModelInfo("openai/gpt-5.2")).resolves.toEqual({
+      provider: null,
+      model: "gpt-5.2",
+    });
+    await expect(getComboModels("openai/gpt-5.2")).resolves.toEqual([
+      "cx/gpt-5.4-mini",
+    ]);
+  });
 });
