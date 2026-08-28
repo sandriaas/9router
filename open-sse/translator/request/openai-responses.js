@@ -295,6 +295,39 @@ function buildReasoningInputItem(msg) {
   return item;
 }
 
+function toResponsesTextConfig(responseFormat) {
+  if (!responseFormat || typeof responseFormat !== "object") return undefined;
+
+  if (responseFormat.type === "json_object") {
+    return { format: { type: "json_object" } };
+  }
+
+  if (responseFormat.type !== "json_schema" || !responseFormat.json_schema?.schema) {
+    return undefined;
+  }
+
+  const jsonSchema = responseFormat.json_schema;
+  const format = {
+    type: "json_schema",
+    name: jsonSchema.name,
+    schema: jsonSchema.schema,
+  };
+  if (jsonSchema.description !== undefined) format.description = jsonSchema.description;
+  if (jsonSchema.strict !== undefined) format.strict = jsonSchema.strict;
+
+  return { format };
+}
+
+function toResponsesToolChoice(toolChoice) {
+  if (typeof toolChoice === "string") return toolChoice;
+  if (toolChoice?.type !== OPENAI_BLOCK.FUNCTION || !toolChoice.function?.name) return toolChoice;
+
+  return {
+    type: OPENAI_BLOCK.FUNCTION,
+    name: toolChoice.function.name,
+  };
+}
+
 /**
  * Convert OpenAI Chat Completions to OpenAI Responses API format
  */
@@ -414,9 +447,14 @@ export function openaiToOpenAIResponsesRequest(model, body, stream, credentials)
     });
   }
 
+  const text = toResponsesTextConfig(body.response_format);
+  if (text) result.text = text;
+  if (body.tool_choice !== undefined) result.tool_choice = toResponsesToolChoice(body.tool_choice);
+  if (body.parallel_tool_calls !== undefined) result.parallel_tool_calls = body.parallel_tool_calls;
+
   // Pass through other relevant fields
   if (body.temperature !== undefined) result.temperature = body.temperature;
-  if (body.max_tokens !== undefined) result.max_tokens = body.max_tokens;
+  if (body.max_tokens !== undefined) result.max_output_tokens = body.max_tokens;
   if (body.top_p !== undefined) result.top_p = body.top_p;
   if (body.reasoning !== undefined) result.reasoning = body.reasoning;
   if (body.reasoning_effort !== undefined) result.reasoning = { effort: body.reasoning_effort, summary: "auto" };
