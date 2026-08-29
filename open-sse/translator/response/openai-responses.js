@@ -452,6 +452,7 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
   if (eventType === "response.output_text.delta") {
     const delta = data.delta || "";
     if (!delta) return null;
+    state.responseText = `${state.responseText || ""}${delta}`;
 
     return buildChunk(
       { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
@@ -516,12 +517,19 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
     if (!state.finishReasonSent) {
       const finishReason = computeFinishReason(state);
 
+      // Some Responses-compatible providers return the complete text only on
+      // the terminal response object instead of emitting output_text.delta.
+      // Preserve that text for Chat Completions clients, but never replay it
+      // when deltas have already been forwarded.
+      const terminalText = extractTerminalResponseText(data.response || data);
+      const streamedText = state.responseText || Object.values(state.msgTextBuf || {}).join("");
+
       state.finishReasonSent = true;
       state.finishReason = finishReason; // Mark for usage injection in stream.js
-      
+
       const finalChunk = buildChunk(
         { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
-        {},
+        terminalText && !streamedText ? { content: terminalText } : {},
         finishReason
       );
 
@@ -567,6 +575,18 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
 
   // Ignore other events
   return null;
+}
+
+function extractTerminalResponseText(response) {
+  if (!response || typeof response !== "object") return "";
+  if (typeof response.output_text === "string") return response.output_text;
+  if (!Array.isArray(response.output)) return "";
+
+  return response.output
+    .flatMap(item => (Array.isArray(item?.content) ? item.content : []))
+    .filter(part => part?.type === "output_text" && typeof part.text === "string")
+    .map(part => part.text)
+    .join("");
 }
 
 // Register both directions

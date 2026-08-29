@@ -1,12 +1,60 @@
 import { describe, expect, it } from "vitest";
 
 import { openaiToOpenAIResponsesRequest } from "../../open-sse/translator/request/openai-responses.js";
+import { openaiResponsesToOpenAIResponse } from "../../open-sse/translator/response/openai-responses.js";
 
 const baseBody = {
   messages: [{ role: "user", content: "Hello" }],
 };
 
 describe("OpenAI Chat to Responses Captain compatibility", () => {
+  it("recovers terminal output_text when no delta was emitted", () => {
+    const state = {};
+    const result = openaiResponsesToOpenAIResponse(
+      {
+        type: "response.completed",
+        response: {
+          id: "resp_terminal_text",
+          status: "completed",
+          output_text: "A concise Captain answer.",
+          usage: { input_tokens: 3, output_tokens: 5 },
+        },
+      },
+      state
+    );
+
+    expect(result.choices[0].delta.content).toBe("A concise Captain answer.");
+    expect(result.choices[0].finish_reason).toBe("stop");
+  });
+
+  it("recovers nested terminal output without duplicating streamed text", () => {
+    const state = {};
+    openaiResponsesToOpenAIResponse(
+      {
+        type: "response.output_text.delta",
+        delta: "Streamed answer.",
+      },
+      state
+    );
+
+    const result = openaiResponsesToOpenAIResponse(
+      {
+        type: "response.done",
+        response: {
+          status: "completed",
+          output: [{
+            type: "message",
+            content: [{ type: "output_text", text: "Terminal answer." }],
+          }],
+        },
+      },
+      state
+    );
+
+    expect(result.choices[0].delta.content).toBeUndefined();
+    expect(result.choices[0].finish_reason).toBe("stop");
+  });
+
   it("maps JSON schema response_format to Responses text.format", () => {
     const schema = {
       type: "object",
